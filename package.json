@@ -1,0 +1,18 @@
+{
+  "name": "qa-agent-playwright",
+  "version": "1.0.0",
+  "description": "QA Agent Playwright Tests",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "report": "playwright show-report"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.40.0",
+    "axe-playwright": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0"
+  }
+}

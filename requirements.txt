@@ -1,0 +1,52 @@
+# Core Framework
+streamlit>=1.29.0
+fastapi>=0.104.1
+uvicorn>=0.24.0
+
+# AI/ML Libraries
+openai>=1.10.0
+langchain>=0.1.0
+langchain-openai>=0.0.8
+langchain-community>=0.0.20
+llama-index>=0.9.30
+sentence-transformers>=2.2.2
+
+# Vector Databases
+faiss-cpu>=1.7.4
+chromadb>=0.4.22
+
+# Video Processing
+openai-whisper>=20231117
+yt-dlp
+
+# Web Scraping & HTTP
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+selenium>=4.15.2
+
+# Data Processing
+pandas>=2.1.4
+numpy>=1.26.0
+pydantic>=2.5.0
+python-dotenv>=1.0.0
+
+# File Processing
+python-docx>=1.1.0
+PyPDF2>=3.0.1
+markdown>=3.5.1
+
+# Reporting
+jinja2>=3.1.2
+fpdf2>=2.7.6
+matplotlib>=3.8.2
+seaborn>=0.13.0
+
+# Utilities
+tqdm>=4.66.1
+loguru>=0.7.2
+click>=8.1.7
+rich>=13.7.0
+
+# Additional dependencies for Python 3.12 compatibility
+setuptools>=69.0.0
+wheel>=0.42.0
