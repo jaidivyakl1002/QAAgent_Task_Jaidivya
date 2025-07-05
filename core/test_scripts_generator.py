@@ -21,6 +21,7 @@ class PlaywrightTestGenerator:
 // Test ID: {test_id}
 
 import {{ test, expect, Page, BrowserContext }} from '@playwright/test';
+import { loginToRecruterAi } from './auth-helper.js';
 
 test.describe('{test_title}', () => {{
     let page: Page;

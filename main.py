@@ -8,6 +8,7 @@ from datetime import datetime
 # Import your existing components
 from core.video_processor import VideoProcessor
 from agents.test_generator_agent import TestGeneratorAgent
+from agents.test_execution_agent import TestExecutionAgent
 from models.test_case import ProcessedVideo, VideoSegment, AgentResponse
 from config.settings import settings
 
@@ -25,6 +26,7 @@ class QAAgentPipeline:
         self.config = config or {}
         self.video_processor = VideoProcessor()
         self.test_generator_agent = TestGeneratorAgent(config)
+        self.execution_agent = TestExecutionAgent()
         
         # Setup directories using the updated settings
         self.setup_directories()
@@ -400,8 +402,24 @@ class QAAgentPipeline:
                     'error': result.error
                 }
             
-            # Step 4: Create execution summary
-            logger.info("Step 4: Creating execution summary...")
+            # Step 4: Execute the generated test scripts
+            logger.info("Step 4: Executing generated Playwright tests...")
+
+            execution_response = self.execution_agent.process({
+                "test_type": "recruter_ai"
+            })
+
+            if not execution_response.success:
+                return {
+                    'success': False,
+                    'message': 'Test execution failed',
+                    'error': execution_response.error
+                }
+
+            logger.info("✅ Test execution completed")
+            
+            # Step 5: Create execution summary
+            logger.info("Step 5: Creating execution summary...")
             execution_summary = self.create_execution_summary(
                 result.data,
                 result.data.get('generation_result', {})
@@ -413,7 +431,11 @@ class QAAgentPipeline:
                 'data': {
                     'test_generation': result.data,
                     'script_generation': result.data.get('generation_result', {}),
-                    'execution_summary': execution_summary,
+                    'execution_result': execution_response.data,
+                    'execution_summary': self.create_execution_summary(
+                        result.data,
+                        result.data.get('generation_result', {})
+                    ),
                     'next_steps': self.get_next_steps(result.data)
                 }
             }

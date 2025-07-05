@@ -81,3 +81,44 @@ class RAGResult(BaseModel):
     results: List[Dict] = Field(default_factory=list, description="Retrieved results")
     generated_response: Optional[str] = Field(None, description="Generated response")
     confidence: float = Field(0.0, description="Confidence score")
+
+class TestStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    ERROR = "error"
+
+class TestResult(BaseModel):
+    """Individual test result"""
+    test_id: str = Field(..., description="Test identifier")
+    test_name: str = Field(..., description="Test name")
+    status: TestStatus = Field(..., description="Test status")
+    duration: float = Field(..., description="Test duration in seconds")
+    error_message: Optional[str] = Field(None, description="Error message if test failed")
+    screenshot_path: Optional[str] = Field(None, description="Path to screenshot file")
+    video_path: Optional[str] = Field(None, description="Path to video file")
+    retry_count: int = Field(0, description="Number of retries attempted")
+    
+    class Config:
+        use_enum_values = True
+
+class TestSuiteResult(BaseModel):
+    """Test suite execution result"""
+    suite_id: str = Field(..., description="Test suite identifier")
+    suite_name: str = Field(..., description="Test suite name")
+    total_tests: int = Field(..., description="Total number of tests")
+    passed: int = Field(..., description="Number of passed tests")
+    failed: int = Field(..., description="Number of failed tests")
+    skipped: int = Field(..., description="Number of skipped tests")
+    errors: int = Field(..., description="Number of tests with errors")
+    total_duration: float = Field(..., description="Total execution duration")
+    start_time: str = Field(..., description="Start time of execution")
+    end_time: str = Field(..., description="End time of execution")
+    test_results: List[TestResult] = Field(default_factory=list, description="List of individual test results")
+    artifacts_dir: str = Field(..., description="Directory containing test artifacts")
+    report_path: Optional[str] = Field(None, description="Path to test report")
+    
+    class Config:
+        use_enum_values = True

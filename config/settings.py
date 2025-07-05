@@ -8,7 +8,6 @@ load_dotenv()
 class Settings:
     # API Configuration
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
     
     # Application Settings
     APP_NAME = os.getenv("APP_NAME", "QAAgent")
@@ -21,7 +20,9 @@ class Settings:
     BROWSER_TYPE = os.getenv("BROWSER_TYPE", "chromium")
     
     # Target Application
-    RECRUTER_BASE_URL = os.getenv("RECRUTER_BASE_URL", "https://www.recruter.ai")
+    TEST_EMAIL = os.getenv('RECRUTER_TEST_EMAIL', 'your-test-email@example.com')
+    TEST_PASSWORD = os.getenv('RECRUTER_TEST_PASSWORD', 'your-test-password')
+    RECRUTER_BASE_URL = os.getenv("RECRUTER_BASE_URL", "https://www.app.recruter.ai/")
     RECRUTER_SIGNUP_URL = os.getenv("RECRUTER_SIGNUP_URL", "https://www.recruter.ai/onboarding/Signup")
     
     # Base Directories

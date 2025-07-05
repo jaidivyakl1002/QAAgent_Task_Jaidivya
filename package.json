@@ -9,10 +9,10 @@
     "report": "playwright show-report"
   },
   "dependencies": {
-    "@playwright/test": "^1.40.0",
     "axe-playwright": "^2.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.53.2",
     "@types/node": "^20.9.0"
   }
 }
