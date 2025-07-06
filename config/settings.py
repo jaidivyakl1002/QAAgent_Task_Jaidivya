@@ -26,8 +26,9 @@ class Settings:
     RECRUTER_SIGNUP_URL = os.getenv("RECRUTER_SIGNUP_URL", "https://www.recruter.ai/onboarding/Signup")
     
     # Base Directories
-    PROJECT_ROOT = Path(__file__).parent.parent  # Gets the root directory of your project
-    DATA_DIR = PROJECT_ROOT / "data"
+    PROJECT_ROOT = Path(__file__).parent.parent.resolve()   # Gets the root directory of your project
+    PROJECT_ROOT_DATA = Path(__file__).parent.parent  # Gets the root directory of your project
+    DATA_DIR = PROJECT_ROOT_DATA / "data"
     PLAYWRIGHT_BASE_DIR = PROJECT_ROOT / "playwright_tests"
     
     # Data Directories
@@ -86,73 +87,47 @@ class Settings:
             return custom_dir
     
     @classmethod
-    def get_reports_dir(cls, test_type: str = None, with_timestamp: bool = True) -> Path:
-        """Get the reports directory, organized by test type and optionally with timestamp"""
+    def get_reports_dir(cls, test_type: str = None) -> Path:
+        """Get the reports directory, organized by test type (no timestamp)"""
         cls.ensure_directories()
         
         if test_type:
             reports_subdir = cls.REPORTS_DIR / test_type
             reports_subdir.mkdir(parents=True, exist_ok=True)
-            
-            if with_timestamp:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                timestamped_dir = reports_subdir / f"run_{timestamp}"
-                timestamped_dir.mkdir(parents=True, exist_ok=True)
-                return timestamped_dir
-            
             return reports_subdir
         
         return cls.REPORTS_DIR
     
     @classmethod
-    def get_screenshots_dir(cls, test_type: str = None, with_timestamp: bool = True) -> Path:
-        """Get the screenshots directory, organized by test type and optionally with timestamp"""
+    def get_screenshots_dir(cls, test_type: str = None) -> Path:
+        """Get the screenshots directory, organized by test type (no timestamp)"""
         cls.ensure_directories()
         
         if test_type:
             screenshots_subdir = cls.SCREENSHOTS_BASE_DIR / test_type
             screenshots_subdir.mkdir(parents=True, exist_ok=True)
-            
-            if with_timestamp:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                timestamped_dir = screenshots_subdir / f"run_{timestamp}"
-                timestamped_dir.mkdir(parents=True, exist_ok=True)
-                return timestamped_dir
-            
             return screenshots_subdir
         
         return cls.SCREENSHOTS_BASE_DIR
     
     @classmethod
-    def get_videos_test_dir(cls, test_type: str = None, with_timestamp: bool = True) -> Path:
-        """Get the videos directory, organized by test type and optionally with timestamp"""
+    def get_videos_test_dir(cls, test_type: str = None) -> Path:
+        """Get the videos directory, organized by test type (no timestamp)"""
         cls.ensure_directories()
         
         if test_type:
             videos_subdir = cls.VIDEOS_TEST_BASE_DIR / test_type
             videos_subdir.mkdir(parents=True, exist_ok=True)
-            
-            if with_timestamp:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                timestamped_dir = videos_subdir / f"run_{timestamp}"
-                timestamped_dir.mkdir(parents=True, exist_ok=True)
-                return timestamped_dir
-            
             return videos_subdir
         
         return cls.VIDEOS_TEST_BASE_DIR
     
     @classmethod
-    def get_test_case_dir(cls, test_name: str = None, with_timestamp: bool = True) -> Path:
-        """Get the test case directory with consistent naming"""
+    def get_test_case_dir(cls, test_name: str = None) -> Path:
+        """Get the test case directory with consistent naming (no timestamp)"""
         cls.ensure_directories()
         
-        if test_name and with_timestamp:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            test_case_dir = cls.TEST_CASES_DIR / f"ts_{test_name}_{timestamp}"
-            test_case_dir.mkdir(parents=True, exist_ok=True)
-            return test_case_dir
-        elif test_name:
+        if test_name:
             test_case_dir = cls.TEST_CASES_DIR / f"ts_{test_name}"
             test_case_dir.mkdir(parents=True, exist_ok=True)
             return test_case_dir
@@ -160,21 +135,46 @@ class Settings:
         return cls.TEST_CASES_DIR
     
     @classmethod
-    def get_playwright_config_paths(cls, test_type: str = "recruter_ai") -> dict:
-        """Get all the paths needed for Playwright configuration"""
+    def clear_directory_contents(cls, directory: Path, keep_subdirs: bool = False):
+        """Clear all contents of a directory, optionally keeping subdirectories"""
+        if not directory.exists():
+            return
+            
+        for item in directory.iterdir():
+            if item.is_file():
+                item.unlink()
+            elif item.is_dir() and not keep_subdirs:
+                # Remove directory and all its contents
+                import shutil
+                shutil.rmtree(item)
+    
+    @classmethod
+    def prepare_clean_directories(cls, test_type: str = "recruter_ai", clear_previous: bool = True):
+        """Prepare directories for a new test run, optionally clearing previous results"""
         cls.ensure_directories()
         
-        # Use current timestamp for this test run
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if clear_previous:
+            # Clear previous test results
+            reports_dir = cls.get_reports_dir(test_type)
+            screenshots_dir = cls.get_screenshots_dir(test_type)
+            videos_dir = cls.get_videos_test_dir(test_type)
+            
+            cls.clear_directory_contents(reports_dir)
+            cls.clear_directory_contents(screenshots_dir)
+            cls.clear_directory_contents(videos_dir)
         
         return {
             'tests_dir': str(cls.get_test_output_dir(test_type)),
-            'reports_dir': str(cls.get_reports_dir(test_type, with_timestamp=True)),
-            'screenshots_dir': str(cls.get_screenshots_dir(test_type, with_timestamp=True)),
-            'videos_dir': str(cls.get_videos_test_dir(test_type, with_timestamp=True)),
-            'fixtures_dir': str(cls.FIXTURES_DIR),
-            'timestamp': timestamp
+            'reports_dir': str(cls.get_reports_dir(test_type)),
+            'screenshots_dir': str(cls.get_screenshots_dir(test_type)),
+            'videos_dir': str(cls.get_videos_test_dir(test_type)),
+            'fixtures_dir': str(cls.FIXTURES_DIR)
         }
+    
+    @classmethod
+    def get_playwright_config_paths(cls, test_type: str = "recruter_ai") -> dict:
+        """Get all the paths needed for Playwright configuration (no timestamp)"""
+        return cls.prepare_clean_directories(test_type, clear_previous=False)
     
     @classmethod
     def get_directory_structure(cls, test_type: str = "recruter_ai") -> dict:
@@ -182,7 +182,7 @@ class Settings:
         paths = cls.get_playwright_config_paths(test_type)
         
         return {
-            'test_cases': str(cls.get_test_case_dir(test_type.replace('_', '.'), with_timestamp=True)),
+            'test_cases': str(cls.get_test_case_dir(test_type.replace('_', '.'))),
             'generated_tests': paths['tests_dir'],
             'reports': paths['reports_dir'],
             'screenshots': paths['screenshots_dir'],
@@ -192,6 +192,37 @@ class Settings:
             'vectorstore': str(cls.VECTORSTORE_DIR),
             'raw_videos': str(cls.VIDEOS_DIR)
         }
+    
+    # String path properties for backward compatibility and RAG engine
+    @classmethod
+    def get_vectorstore_path(cls) -> str:
+        """Get vectorstore path as string for RAG engine compatibility"""
+        cls.ensure_directories()
+        return str(cls.VECTORSTORE_DIR)
+    
+    @classmethod
+    def get_data_dir_path(cls) -> str:
+        """Get data directory path as string"""
+        cls.ensure_directories()
+        return str(cls.DATA_DIR)
+    
+    @classmethod
+    def get_transcripts_path(cls) -> str:
+        """Get transcripts directory path as string"""
+        cls.ensure_directories()
+        return str(cls.TRANSCRIPTS_DIR)
+    
+    @classmethod
+    def get_test_cases_path(cls) -> str:
+        """Get test cases directory path as string"""
+        cls.ensure_directories()
+        return str(cls.TEST_CASES_DIR)
+    
+    @classmethod
+    def get_videos_path(cls) -> str:
+        """Get videos directory path as string"""
+        cls.ensure_directories()
+        return str(cls.VIDEOS_DIR)
     
     # Legacy properties for backward compatibility
     @property

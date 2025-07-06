@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from datetime import datetime
+from pydantic import BaseModel
 
 from agents.base_agent import BaseAgent
 from models.test_case import (
@@ -34,20 +35,19 @@ class TestGeneratorAgent(BaseAgent):
         # CRITICAL FIX: Ensure all directories exist BEFORE initializing RAG engine
         settings.ensure_directories()
         
-        # Create vectorstore directory explicitly and ensure it exists
-        vectorstore_dir = settings.VECTORSTORE_DIR
-        vectorstore_dir.mkdir(parents=True, exist_ok=True)
+        # Get vectorstore path as string for RAG engine compatibility
+        vectorstore_path = settings.get_vectorstore_path()
         
         # Verify the directory exists before proceeding
-        if not vectorstore_dir.exists():
-            raise RuntimeError(f"Failed to create vectorstore directory: {vectorstore_dir}")
+        if not Path(vectorstore_path).exists():
+            raise RuntimeError(f"Failed to create vectorstore directory: {vectorstore_path}")
         
-        self.logger.info(f"Vectorstore directory created/verified: {vectorstore_dir}")
+        self.logger.info(f"Vectorstore directory created/verified: {vectorstore_path}")
         
         # Initialize RAG engine for test case generation
         self.rag_engine = RAGEngine(
             model_name=self.get_config('embedding_model', 'all-MiniLM-L6-v2'),
-            vector_store_path=self.get_config('vector_store_path', str(vectorstore_dir)),
+            vector_store_path=self.get_config('vector_store_path', vectorstore_path),
             openai_api_key=self.get_config('openai_api_key', settings.OPENAI_API_KEY)
         )
         
@@ -62,16 +62,15 @@ class TestGeneratorAgent(BaseAgent):
             base_url=self.get_config('base_url', settings.RECRUTER_BASE_URL)
         )
         
-        # Use settings for output paths
         self.test_cases_dir = settings.TEST_CASES_DIR
         self.scripts_base_dir = settings.GENERATED_TESTS_DIR
         self.reports_dir = settings.REPORTS_DIR
-        self.screenshots_dir = settings.SCREENSHOTS_DIR
-        self.videos_dir = settings.VIDEOS_TEST_DIR
+        self.screenshots_dir = settings.SCREENSHOTS_BASE_DIR
+        self.videos_dir = settings.VIDEOS_TEST_BASE_DIR
         
         # Ensure all output directories exist
         for directory in [self.test_cases_dir, self.scripts_base_dir, self.reports_dir, 
-                         self.screenshots_dir, self.videos_dir]:
+                        self.screenshots_dir, self.videos_dir]:
             directory.mkdir(parents=True, exist_ok=True)
             self.logger.info(f"Output directory ensured: {directory}")
         
@@ -88,6 +87,7 @@ class TestGeneratorAgent(BaseAgent):
         self.logger.info(f"Test cases directory: {self.test_cases_dir}")
         self.logger.info(f"Scripts base directory: {self.scripts_base_dir}")
         self.logger.info(f"Reports directory: {self.reports_dir}")
+        self.logger.info(f"Vectorstore path: {vectorstore_path}")
     
     def process(self, input_data: Dict[str, Any]) -> AgentResponse:
         """
@@ -158,12 +158,13 @@ class TestGeneratorAgent(BaseAgent):
             self.rag_engine.add_video_segments(processed_video)
             
             # Save vector store with error handling
+            print("Attempting to save vector store")  # Debug
             try:
                 self.rag_engine.save_vector_store()
                 self.logger.info("Vector store saved successfully")
             except Exception as save_error:
                 self.logger.warning(f"Failed to save vector store: {save_error}")
-                # Continue processing even if save fails
+                raise
             
             # Generate test cases
             additional_requirements = input_data.get('requirements', {})
@@ -239,10 +240,11 @@ class TestGeneratorAgent(BaseAgent):
             if not processed_test_cases:
                 return self.create_error_response("No valid test cases found after processing")
             
-            # Get organized output directory using settings
             output_dir = input_data.get('output_dir')
             if not output_dir:
-                output_dir = str(settings.get_test_output_dir(test_type))
+                # Use settings to prepare clean directories (this clears previous results)
+                dirs = settings.prepare_clean_directories(test_type, clear_previous=True)
+                output_dir = dirs['tests_dir']
             
             # Ensure output directory exists
             Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -287,6 +289,10 @@ class TestGeneratorAgent(BaseAgent):
         """Execute the full pipeline: video -> test cases -> scripts"""
         try:
             self.logger.info(f"Starting full pipeline execution for test type: {test_type}")
+            
+            # Prepare clean directories at the start of full pipeline
+            dirs = settings.prepare_clean_directories(test_type, clear_previous=True)
+            self.logger.info(f"Prepared clean directories for {test_type}")
             
             # Step 1: Generate test cases from video
             self.logger.info("Step 1: Generating test cases from video")
@@ -346,60 +352,51 @@ class TestGeneratorAgent(BaseAgent):
             self.logger.error(error_msg)
             raise
     
-    # Test case generation methods (from original TestGeneratorAgent)
-    def generate_test_suite(self, processed_video: ProcessedVideo, 
-                           requirements: Dict[str, Any] = None, 
-                           test_type: str = 'recruter_ai') -> TestSuite:
+    def _is_valid_test_case(self, test_case: Dict[str, Any]) -> bool:
+        if not test_case.get("steps"):
+            return False
+        for step in test_case["steps"]:
+            if not isinstance(step, dict) or not step.get("action"):
+                return False
+        return True
+    
+    def generate_test_suite(self, processed_video: ProcessedVideo,
+                        requirements: Dict[str, Any] = None,
+                        test_type: str = 'recruter_ai') -> TestSuite:
         """Generate a comprehensive test suite from processed video"""
         try:
-            # Create test suite with test type in ID
             test_suite = TestSuite(
-                id=f"ts_{test_type}_{processed_video.title.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                id=f"ts_{test_type}_{processed_video.title.lower().replace(' ', '_')}",  # Removed timestamp
                 name=f"Test Suite for {processed_video.title} ({test_type})",
                 description=f"Automated test suite generated from video: {processed_video.title} (Test Type: {test_type})",
                 source_video=processed_video.url,
                 created_at=datetime.now().isoformat()
             )
-            
-            # Generate different types of test cases
+
             test_cases = []
-            
-            # 1. Functional test cases from user flows
-            functional_tests = self.test_case_generator.generate_functional_tests(
-                processed_video, requirements
-            )
-            test_cases.extend(functional_tests)
-            
-            # 2. Edge case tests
-            edge_case_tests = self.test_case_generator.generate_edge_case_tests(
-                processed_video, requirements
-            )
-            test_cases.extend(edge_case_tests)
-            
-            # 3. Cross-browser tests
-            cross_browser_tests = self.test_case_generator.generate_cross_browser_tests(
-                processed_video, requirements
-            )
-            test_cases.extend(cross_browser_tests)
-            
-            # 4. Accessibility tests
-            accessibility_tests = self.test_case_generator.generate_accessibility_tests(
-                processed_video, requirements
-            )
-            test_cases.extend(accessibility_tests)
-            
-            # 5. Performance tests
-            performance_tests = self.test_case_generator.generate_performance_tests(
-                processed_video, requirements
-            )
-            test_cases.extend(performance_tests)
-            
+
+            for generator_func in [
+                self.test_case_generator.generate_functional_tests,
+                self.test_case_generator.generate_edge_case_tests,
+                self.test_case_generator.generate_cross_browser_tests,
+                self.test_case_generator.generate_accessibility_tests,
+                self.test_case_generator.generate_performance_tests,
+            ]:
+                generated = generator_func(processed_video, requirements)
+                for test in generated:
+                    # Convert to dict if it's a Pydantic model
+                    test_dict = test.dict() if isinstance(test, BaseModel) else test
+
+                    if self._is_valid_test_case(test_dict):
+                        test_cases.append(TestCase(**test_dict))
+                    else:
+                        self.logger.warning(f"⚠️ Invalid test case skipped: {test_dict.get('id', 'unknown')}")
+
             test_suite.test_cases = test_cases
-            
             self.logger.info(f"Generated {len(test_cases)} test cases for video: {processed_video.title} (type: {test_type})")
-            
+
             return test_suite
-            
+
         except Exception as e:
             self.logger.error(f"Error generating test suite: {e}")
             raise
@@ -407,19 +404,18 @@ class TestGeneratorAgent(BaseAgent):
     def save_test_suite(self, test_suite: TestSuite) -> Path:
         """Save test suite to different formats"""
         try:
-            # Use settings directory structure
-            base_path = self.test_cases_dir / test_suite.id
-            base_path.mkdir(parents=True, exist_ok=True)
+            # Use settings method to get test case directory (no timestamp)
+            base_path = settings.get_test_case_dir(test_suite.id.replace('ts_', ''))
             
-            # Save as JSON
+            # Save as JSON (will overwrite existing)
             json_path = base_path / f"{test_suite.id}.json"
             save_json(test_suite.model_dump(), json_path)
             
-            # Save as Markdown for human readability
+            # Save as Markdown for human readability (will overwrite existing)
             markdown_path = base_path / f"{test_suite.id}.md"
             self.save_test_suite_markdown(test_suite, markdown_path)
             
-            # Save individual test cases
+            # Save individual test cases (will overwrite existing)
             for test_case in test_suite.test_cases:
                 test_case_path = base_path / f"{test_case.id}.json"
                 save_json(test_case.model_dump(), test_case_path)
@@ -592,23 +588,7 @@ class TestGeneratorAgent(BaseAgent):
     def get_directory_structure(self) -> Dict[str, Any]:
         """Get current directory structure for debugging"""
         try:
-            return {
-                'test_cases_dir': str(self.test_cases_dir),
-                'scripts_base_dir': str(self.scripts_base_dir),
-                'reports_dir': str(self.reports_dir),
-                'screenshots_dir': str(self.screenshots_dir),
-                'videos_dir': str(self.videos_dir),
-                'vectorstore_dir': str(settings.VECTORSTORE_DIR),
-                'organized_output_dirs': {
-                    'recruter_ai': str(settings.get_test_output_dir('recruter_ai')),
-                    'custom': str(settings.get_test_output_dir('custom')),
-                },
-                'reports_dirs': {
-                    'general': str(settings.get_reports_dir()),
-                    'recruter_ai': str(settings.get_reports_dir('recruter_ai')),
-                    'custom': str(settings.get_reports_dir('custom')),
-                }
-            }
+            return settings.get_directory_structure()
         except Exception as e:
             self.logger.error(f"Error getting directory structure: {e}")
             return {'error': str(e)}

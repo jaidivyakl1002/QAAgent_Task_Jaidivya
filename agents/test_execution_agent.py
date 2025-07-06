@@ -8,6 +8,7 @@ from datetime import datetime
 import asyncio
 import time
 import sys
+import shutil
 sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
 from dataclasses import dataclass
 from enum import Enum
@@ -36,14 +37,19 @@ class TestExecutionAgent(BaseAgent):
         self.screenshot_enabled = self.get_config('screenshot_enabled', True)
         self.retries = self.get_config('retries', 2)
         self.parallel_workers = self.get_config('parallel_workers', 1)
+        self.clear_previous_results = self.get_config('clear_previous_results', True)
         
         self.test_type = self.get_config('test_type', 'recruter_ai')
     
-        # Use dynamic directory methods
+        # Use static directory methods (no timestamps)
         self.test_scripts_dir = settings.get_test_output_dir(self.test_type)
-        self.reports_dir = settings.get_reports_dir(self.test_type, with_timestamp=False)
-        self.screenshots_dir = settings.get_screenshots_dir(self.test_type, with_timestamp=False)
-        self.videos_dir = settings.get_videos_test_dir(self.test_type, with_timestamp=False)
+        self.reports_dir = settings.get_reports_dir(self.test_type)
+        self.screenshots_dir = settings.get_screenshots_dir(self.test_type)
+        self.videos_dir = settings.get_videos_test_dir(self.test_type)
+        
+        # Clear previous results if requested
+        if self.clear_previous_results:
+            self._clear_previous_results()
         
         # Ensure all directories exist
         for directory in [self.test_scripts_dir, self.reports_dir, self.screenshots_dir, self.videos_dir]:
@@ -63,6 +69,36 @@ class TestExecutionAgent(BaseAgent):
         self.logger.info("TestExecutionAgent initialized")
         self.logger.info(f"Test scripts directory: {self.test_scripts_dir}")
         self.logger.info(f"Reports directory: {self.reports_dir}")
+        self.logger.info(f"Clear previous results: {self.clear_previous_results}")
+    
+    def _clear_previous_results(self):
+        """Clear previous test results and artifacts"""
+        try:
+            self.logger.info("Clearing previous test results...")
+            
+            # Clear reports directory
+            if self.reports_dir.exists():
+                settings.clear_directory_contents(self.reports_dir)
+                self.logger.info(f"Cleared reports directory: {self.reports_dir}")
+            
+            # Clear screenshots directory
+            if self.screenshots_dir.exists():
+                settings.clear_directory_contents(self.screenshots_dir)
+                self.logger.info(f"Cleared screenshots directory: {self.screenshots_dir}")
+            
+            # Clear videos directory
+            if self.videos_dir.exists():
+                settings.clear_directory_contents(self.videos_dir)
+                self.logger.info(f"Cleared videos directory: {self.videos_dir}")
+            
+            # Clear test-results directory in playwright base
+            test_results_dir = settings.PLAYWRIGHT_BASE_DIR / "test-results"
+            if test_results_dir.exists():
+                settings.clear_directory_contents(test_results_dir)
+                self.logger.info(f"Cleared test-results directory: {test_results_dir}")
+            
+        except Exception as e:
+            self.logger.warning(f"Error clearing previous results: {e}")
     
     def process(self, input_data: Dict[str, Any]) -> AgentResponse:
         """
@@ -73,6 +109,7 @@ class TestExecutionAgent(BaseAgent):
                 - test_suite_path: Path to test suite directory or specific test files
                 - test_type: Type of tests to run (e.g., 'recruter_ai')
                 - execution_config: Optional execution configuration overrides
+                - clear_previous: Whether to clear previous results (default: True)
         """
         try:
             # Validate input
@@ -82,6 +119,11 @@ class TestExecutionAgent(BaseAgent):
             test_suite_path = input_data.get('test_suite_path')
             test_type = input_data.get('test_type', 'recruter_ai')
             execution_config = input_data.get('execution_config', {})
+            clear_previous = input_data.get('clear_previous', True)
+            
+            # Clear previous results if requested
+            if clear_previous:
+                self._clear_previous_results()
             
             # If no specific path provided, use the test type directory
             if not test_suite_path:
@@ -140,17 +182,16 @@ class TestExecutionAgent(BaseAgent):
             if not test_files:
                 raise ValueError(f"No test files found in {test_suite_path}")
             
-            # Create execution-specific artifacts directory
-            execution_id = f"exec_{test_type}_{start_time.strftime('%Y%m%d_%H%M%S')}"
-            artifacts_dir = self.reports_dir / execution_id
-            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            # Create execution ID (simple, no timestamp)
+            execution_id = test_type
+            artifacts_dir = self.reports_dir.resolve()
             
             # Setup execution environment
             env = self._setup_execution_environment(artifacts_dir, execution_config)
             
             # Execute tests
             test_results = []
-            for test_path in test_files:  # Now test_files contains directories
+            for test_path in test_files:
                 if test_path.is_dir():
                     self.logger.info(f"Executing test directory: {test_path}")
                 else:
@@ -197,24 +238,16 @@ class TestExecutionAgent(BaseAgent):
         """Setup environment variables for test execution"""
         config = execution_config or {}
         
-        # Get Playwright paths from settings for this test type
-        playwright_paths = settings.get_playwright_config_paths(self.test_type)
-        
         # Base environment
         env = os.environ.copy()
         
         # Playwright specific settings
         env['PLAYWRIGHT_BROWSERS_PATH'] = str(Path.home() / '.cache' / 'ms-playwright')
         
-        # Use timestamped directories from settings for this execution
-        screenshots_dir = Path(playwright_paths['screenshots_dir'])
-        videos_dir = Path(playwright_paths['videos_dir'])
-        reports_dir = Path(playwright_paths['reports_dir'])
-        
-        # Override with execution-specific artifacts directory if needed
-        if artifacts_dir != reports_dir:
-            screenshots_dir = artifacts_dir / 'screenshots'
-            videos_dir = artifacts_dir / 'videos'
+        # Use static directories (no timestamps)
+        screenshots_dir = self.screenshots_dir
+        videos_dir = self.videos_dir
+        reports_dir = self.reports_dir
         
         env['PLAYWRIGHT_SCREENSHOTS_DIR'] = str(screenshots_dir)
         env['PLAYWRIGHT_VIDEOS_DIR'] = str(videos_dir)
@@ -248,8 +281,7 @@ class TestExecutionAgent(BaseAgent):
         
         # Test type and execution context
         env['TEST_TYPE'] = self.test_type
-        env['EXECUTION_ID'] = artifacts_dir.name
-        env['TIMESTAMP'] = playwright_paths['timestamp']
+        env['EXECUTION_ID'] = self.test_type
         
         # Playwright specific environment variables
         env['PWTEST_SKIP_TEST_OUTPUT'] = 'false'
@@ -274,6 +306,7 @@ class TestExecutionAgent(BaseAgent):
         self.logger.info(f"Reports dir: {reports_dir}")
         self.logger.info(f"Base URL: {env['BASE_URL']}")
         self.logger.info(f"Browser: {env['BROWSER']} (headless: {env['HEADLESS']})")
+        self.logger.info(f"VIDEO_ENABLED: {env['VIDEO_ENABLED']}, SCREENSHOT_ENABLED: {env['SCREENSHOT_ENABLED']}")
         
         return env
     
@@ -326,22 +359,16 @@ class TestExecutionAgent(BaseAgent):
             # Prepare Playwright command
             cmd = [
                 'npx.cmd', 'playwright', 'test',
-                str(relative_test_path),  # Use relative path to the specific test file
+                str(relative_test_path),
                 '--reporter=json',
-                f'--output-dir={artifacts_dir}',
-                '--headed' if not self.headless else '--headless',
+                '--headed' if not self.headless else '',
                 f'--browser={self.browser}',
                 f'--timeout={self.timeout}',
                 f'--retries={self.retries}'
             ]
-            
-            # Add video recording if enabled
-            if self.video_enabled:
-                cmd.extend(['--video=retain-on-failure'])
-            
-            # Add screenshot on failure
-            if self.screenshot_enabled:
-                cmd.extend(['--screenshot=only-on-failure'])
+
+            # Remove empty strings from command
+            cmd = [arg for arg in cmd if arg]
             
             self.logger.info(f"Executing test file: {test_path.name}")
             self.logger.info(f"Relative path: {relative_test_path}")
@@ -351,7 +378,7 @@ class TestExecutionAgent(BaseAgent):
             # Execute the test
             result = subprocess.run(
                 cmd,
-                cwd=playwright_dir,  # Use playwright_tests as working directory
+                cwd=playwright_dir,
                 env=env,
                 capture_output=True,
                 text=True,
@@ -396,36 +423,6 @@ class TestExecutionAgent(BaseAgent):
                 duration=0.0,
                 error_message=str(e)
             )]
-    
-    def _execute_single_test_file_with_retry(self, test_file: Path, artifacts_dir: Path, 
-                                        env: Dict[str, str]) -> List[TestResult]:
-        """Execute test file with retry logic"""
-        max_retries = self.retries
-        last_exception = None
-        
-        for attempt in range(max_retries + 1):
-            try:
-                if attempt > 0:
-                    self.logger.info(f"Retrying test execution for {test_file.name} (attempt {attempt + 1})")
-                
-                return self._execute_single_test_file(test_file, artifacts_dir, env)
-                
-            except Exception as e:
-                last_exception = e
-                self.logger.warning(f"Test execution attempt {attempt + 1} failed: {e}")
-                
-                if attempt < max_retries:
-                    time.sleep(2 ** attempt)  # Exponential backoff
-        
-        # All retries failed
-        return [TestResult(
-            test_id=f"retry_failed_{test_file.name}",
-            test_name=test_file.name,
-            status=TestStatus.ERROR,
-            duration=0.0,
-            error_message=f"All {max_retries + 1} attempts failed. Last error: {str(last_exception)}",
-            retry_count=max_retries
-        )]
     
     def _parse_playwright_results(self, subprocess_result: subprocess.CompletedProcess, 
                                  test_file: Path, artifacts_dir: Path) -> List[TestResult]:
@@ -573,16 +570,16 @@ class TestExecutionAgent(BaseAgent):
         try:
             report_dir = Path(execution_result.artifacts_dir)
             
-            # Generate JSON report
+            # Generate JSON report (overwrite existing)
             json_report_path = report_dir / 'execution_report.json'
             json_data = self._serialize_execution_result(execution_result)
             save_json(json_data, json_report_path)
             
-            # Generate HTML report
+            # Generate HTML report (overwrite existing)
             html_report_path = report_dir / 'execution_report.html'
             self._generate_html_report(execution_result, html_report_path)
             
-            # Generate Markdown report
+            # Generate Markdown report (overwrite existing)
             md_report_path = report_dir / 'execution_report.md'
             self._generate_markdown_report(execution_result, md_report_path)
             
@@ -821,17 +818,27 @@ class TestExecutionAgent(BaseAgent):
         try:
             reports = []
             
+            # Look for execution_report.json directly in reports directory
+            report_file = self.reports_dir / 'execution_report.json'
+            if report_file.exists():
+                try:
+                    report_data = load_json(report_file)
+                    reports.append(report_data)
+                except Exception as e:
+                    self.logger.warning(f"Error loading report {report_file}: {e}")
+            
+            # Also check subdirectories for test type specific reports
             for report_dir in sorted(self.reports_dir.iterdir(), reverse=True):
-                if report_dir.is_dir() and report_dir.name.startswith('exec_'):
-                    report_file = report_dir / 'execution_report.json'
-                    if report_file.exists():
+                if report_dir.is_dir():
+                    sub_report_file = report_dir / 'execution_report.json'
+                    if sub_report_file.exists():
                         try:
-                            report_data = load_json(report_file)
+                            report_data = load_json(sub_report_file)
                             reports.append(report_data)
                             if len(reports) >= limit:
                                 break
                         except Exception as e:
-                            self.logger.warning(f"Error loading report {report_file}: {e}")
+                            self.logger.warning(f"Error loading report {sub_report_file}: {e}")
             
             return reports
             
