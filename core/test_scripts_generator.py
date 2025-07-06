@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
@@ -10,9 +11,40 @@ logger = logging.getLogger(__name__)
 class PlaywrightTestGenerator:
     """Enhanced Playwright test generator with better error handling and debugging"""
     
-    def __init__(self, base_url: str = "https://www.recruter.ai"):
+    def __init__(self, base_url: str = "https://www.app.recruter.ai"):
         self.base_url = base_url
         self.test_template = self._load_template()
+    
+    def _escape_string(self, value: str) -> str:
+        """Properly escape strings for JavaScript/TypeScript"""
+        if not value:
+            return ""
+        
+        # Replace single quotes with escaped single quotes
+        value = value.replace("'", "\\'")
+        # Replace double quotes with escaped double quotes  
+        value = value.replace('"', '\\"')
+        # Replace newlines
+        value = value.replace('\n', '\\n')
+        value = value.replace('\r', '\\r')
+        # Replace backslashes
+        value = value.replace('\\', '\\\\')
+        
+        return value
+    
+    def _escape_selector(self, selector: str) -> str:
+        """Properly escape CSS selectors for Playwright"""
+        if not selector:
+            return ""
+        
+        # For selectors, we need to be more careful
+        # Replace single quotes with double quotes in attribute selectors
+        selector = re.sub(r"=\s*'([^']*)'", r'="\1"', selector)
+        
+        # If the selector contains double quotes, escape them
+        selector = selector.replace('"', '\\"')
+        
+        return selector
         
     def _load_template(self) -> str:
         """Enhanced Playwright test template with better error handling"""
@@ -25,18 +57,28 @@ import {{ test, expect, Page, BrowserContext }} from '@playwright/test';
 
 // Inline login function to avoid import issues
 async function loginToRecruterAi(page: Page): Promise<void> {{
-    const email = process.env.TEST_EMAIL || process.env.RECRUTER_EMAIL;
-    const password = process.env.TEST_PASSWORD || process.env.RECRUTER_PASSWORD;
+    const email = 'jaidivya.lohani@learner.manipal.edu';
+    const password = 'Screwdriver@1002';
     
-    if (!email || !password) {{
-        throw new Error("Missing login credentials in environment variables");
-    }}
+    console.log('🔐 Navigating to login page...');
+    await page.goto('https://www.app.recruter.ai/', {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
     
-    await page.goto(process.env.RECRUTER_BASE_URL || 'https://www.recruter.ai');
-    await page.fill('input[type="email"], input[name="email"]', email);
-    await page.fill('input[type="password"], input[name="password"]', password);
-    await page.click('button[type="submit"], button:has-text("Login")');
+    console.log('🔐 Filling login credentials...');
+    // Fill email field
+    await page.waitForSelector('input[name="email"]', {{ timeout: 10000 }});
+    await page.fill('input[name="email"]', email);
+    
+    // Fill password field
+    await page.waitForSelector('input[name="password"]', {{ timeout: 10000 }});
+    await page.fill('input[name="password"]', password);
+    
+    console.log('🔐 Clicking sign in button...');
+    // Click the sign in button
+    await page.click('button[type="submit"]');
+    
+    // Wait for successful login (adjust the selector based on your dashboard)
     await page.waitForURL(/dashboard|home|profile/, {{ timeout: 15000 }});
+    console.log('✅ Login successful');
 }}
 
 test.describe('{test_title}', () => {{
@@ -59,6 +101,7 @@ test.describe('{test_title}', () => {{
         console.log('🔐 Logging into Recruter.ai');
         await loginToRecruterAi(page);
         console.log('✅ Login successful');
+        
         // Enhanced error handling
         page.on('pageerror', (error) => {{
             console.error('🚨 Page JavaScript error:', error.message);
@@ -112,7 +155,7 @@ test.describe('{test_title}', () => {{
         }}
     }});
 }});
-''' 
+'''
 
     def generate_test_script(self, test_case: Dict[str, Any]) -> str:
         """Generate a complete Playwright test script with enhanced error handling"""
@@ -144,25 +187,25 @@ test.describe('{test_title}', () => {{
             return self._generate_error_script(test_case, str(e))
     
     def _generate_test_steps(self, steps: List[Dict], test_type: str) -> str:
-        """Convert JSON steps to Playwright code with robust error handling"""
+        """Convert JSON steps to Playwright code with robust error handling and proper escaping"""
         playwright_code = []
         
         # Add initial navigation with retry logic
-        playwright_code.append(f"        // Navigate to base URL with retry logic")
-        playwright_code.append(f"        console.log('🌐 Navigating to: {self.base_url}');")
+        playwright_code.append(f"        // Navigate to login page first")
+        playwright_code.append(f"        console.log('🌐 Navigating to: https://www.app.recruter.ai/');")
         playwright_code.append(f"        ")
         playwright_code.append(f"        let retries = 3;")
         playwright_code.append(f"        while (retries > 0) {{")
         playwright_code.append(f"            try {{")
-        playwright_code.append(f"                await page.goto('{self.base_url}', {{ waitUntil: 'domcontentloaded', timeout: 30000 }});")
+        playwright_code.append(f"                await page.goto('https://www.app.recruter.ai/', {{ waitUntil: 'domcontentloaded', timeout: 30000 }});")
         playwright_code.append(f"                await page.waitForLoadState('networkidle', {{ timeout: 10000 }});")
-        playwright_code.append(f"                console.log('✅ Page loaded successfully');")
+        playwright_code.append(f"                console.log('✅ Login page loaded successfully');")
         playwright_code.append(f"                break;")
         playwright_code.append(f"            }} catch (navError) {{")
         playwright_code.append(f"                retries--;")
         playwright_code.append(f"                console.log(`⚠️  Navigation attempt failed, retries left: ${{retries}}`);")
         playwright_code.append(f"                if (retries === 0) {{")
-        playwright_code.append(f"                    console.error('❌ Failed to load page after 3 attempts');")
+        playwright_code.append(f"                    console.error('❌ Failed to load login page after 3 attempts');")
         playwright_code.append(f"                    throw navError;")
         playwright_code.append(f"                }}")
         playwright_code.append(f"                await page.waitForTimeout(2000);")
@@ -222,12 +265,17 @@ test.describe('{test_title}', () => {{
             wait_condition = step.get('wait_condition')
             screenshot = step.get('screenshot', False)
             
+            # Properly escape values
+            escaped_selector = self._escape_selector(selector)
+            escaped_value = self._escape_string(value)
+            escaped_expected = self._escape_string(expected_result)
+            
             playwright_code.append(f"        // Step {i}: {action}")
             playwright_code.append(f"        console.log('🔄 Executing step {i}: {action}');")
             
             # Generate code based on action type with enhanced error handling
             if action == 'navigate':
-                url = value or selector
+                url = escaped_value or escaped_selector
                 playwright_code.append(f"        try {{")
                 playwright_code.append(f"            await page.goto('{url}', {{ waitUntil: 'domcontentloaded', timeout: 30000 }});")
                 playwright_code.append(f"            await page.waitForLoadState('networkidle', {{ timeout: 10000 }});")
@@ -236,19 +284,42 @@ test.describe('{test_title}', () => {{
                 playwright_code.append(f"            console.error('❌ Navigation failed:', error.message);")
                 playwright_code.append(f"            throw error;")
                 playwright_code.append(f"        }}")
-                
+            
+            elif action == 'login':
+                playwright_code.append(f"        try {{")
+                playwright_code.append(f"            // Fill email field")
+                playwright_code.append(f"            await page.waitForSelector('input[name=\"email\"]', {{ state: 'visible', timeout: 10000 }});")
+                playwright_code.append(f"            await page.fill('input[name=\"email\"]', 'jaidivya.lohani@learner.manipal.edu');")
+                playwright_code.append(f"            ")
+                playwright_code.append(f"            // Fill password field")
+                playwright_code.append(f"            await page.waitForSelector('input[name=\"password\"]', {{ state: 'visible', timeout: 10000 }});")
+                playwright_code.append(f"            await page.fill('input[name=\"password\"]', 'Screwdriver@1002');")
+                playwright_code.append(f"            ")
+                playwright_code.append(f"            // Click sign in button")
+                playwright_code.append(f"            await page.click('button[type=\"submit\"]');")
+                playwright_code.append(f"            ")
+                playwright_code.append(f"            // Wait for successful login")
+                playwright_code.append(f"            await page.waitForURL(/dashboard|home|profile/, {{ timeout: 15000 }});")
+                playwright_code.append(f"            console.log('✅ Login successful');")
+                playwright_code.append(f"        }} catch (error) {{")
+                playwright_code.append(f"            console.error('❌ Login failed:', error.message);")
+                playwright_code.append(f"            await page.screenshot({{ path: 'screenshots/login-failed.png', fullPage: true }});")
+                playwright_code.append(f"            throw error;")
+                playwright_code.append(f"        }}")
+
             elif action == 'click':
                 playwright_code.append(f"        try {{")
                 playwright_code.append(f"            // Wait for element to be clickable")
-                playwright_code.append(f"            await page.waitForSelector('{selector}', {{ state: 'visible', timeout: 10000 }});")
-                playwright_code.append(f"            await page.locator('{selector}').click({{ timeout: 5000 }});")
+                playwright_code.append(f"            await page.waitForSelector('{escaped_selector}', {{ state: 'visible', timeout: 10000 }});")
+                playwright_code.append(f"            await page.locator('{escaped_selector}').click({{ timeout: 5000 }});")
                 playwright_code.append(f"            console.log('✅ Click successful');")
                 
                 if wait_condition:
-                    playwright_code.append(f"            await page.waitForSelector('{wait_condition}', {{ timeout: 10000 }});")
+                    escaped_wait_condition = self._escape_selector(wait_condition)
+                    playwright_code.append(f"            await page.waitForSelector('{escaped_wait_condition}', {{ timeout: 10000 }});")
                     
                 playwright_code.append(f"        }} catch (error) {{")
-                playwright_code.append(f"            console.error('❌ Click failed on selector: {selector}');")
+                playwright_code.append(f"            console.error('❌ Click failed on selector: {escaped_selector}');")
                 playwright_code.append(f"            console.error('Error:', error.message);")
                 playwright_code.append(f"            ")
                 playwright_code.append(f"            // Try to find similar elements")
@@ -259,34 +330,34 @@ test.describe('{test_title}', () => {{
                 
             elif action == 'fill' or action == 'type':
                 playwright_code.append(f"        try {{")
-                playwright_code.append(f"            await page.waitForSelector('{selector}', {{ state: 'visible', timeout: 10000 }});")
-                playwright_code.append(f"            await page.locator('{selector}').clear();")
-                playwright_code.append(f"            await page.locator('{selector}').fill('{value}');")
+                playwright_code.append(f"            await page.waitForSelector('{escaped_selector}', {{ state: 'visible', timeout: 10000 }});")
+                playwright_code.append(f"            await page.locator('{escaped_selector}').clear();")
+                playwright_code.append(f"            await page.locator('{escaped_selector}').fill('{escaped_value}');")
                 playwright_code.append(f"            console.log('✅ Fill successful');")
                 playwright_code.append(f"        }} catch (error) {{")
-                playwright_code.append(f"            console.error('❌ Fill failed on selector: {selector}');")
+                playwright_code.append(f"            console.error('❌ Fill failed on selector: {escaped_selector}');")
                 playwright_code.append(f"            throw error;")
                 playwright_code.append(f"        }}")
                 
             elif action == 'verify_text':
                 playwright_code.append(f"        try {{")
-                playwright_code.append(f"            await page.waitForSelector('{selector}', {{ timeout: 10000 }});")
-                playwright_code.append(f"            await expect(page.locator('{selector}')).toContainText('{value}', {{ timeout: 5000 }});")
+                playwright_code.append(f"            await page.waitForSelector('{escaped_selector}', {{ timeout: 10000 }});")
+                playwright_code.append(f"            await expect(page.locator('{escaped_selector}')).toContainText('{escaped_value}', {{ timeout: 5000 }});")
                 playwright_code.append(f"            console.log('✅ Text verification successful');")
                 playwright_code.append(f"        }} catch (error) {{")
-                playwright_code.append(f"            const actualText = await page.locator('{selector}').textContent().catch(() => 'Element not found');")
+                playwright_code.append(f"            const actualText = await page.locator('{escaped_selector}').textContent().catch(() => 'Element not found');")
                 playwright_code.append(f"            console.error('❌ Text verification failed');")
-                playwright_code.append(f"            console.error('Expected:', '{value}');")
+                playwright_code.append(f"            console.error('Expected:', '{escaped_value}');")
                 playwright_code.append(f"            console.error('Actual:', actualText);")
                 playwright_code.append(f"            throw error;")
                 playwright_code.append(f"        }}")
                 
             elif action == 'verify_visible':
                 playwright_code.append(f"        try {{")
-                playwright_code.append(f"            await expect(page.locator('{selector}')).toBeVisible({{ timeout: 10000 }});")
+                playwright_code.append(f"            await expect(page.locator('{escaped_selector}')).toBeVisible({{ timeout: 10000 }});")
                 playwright_code.append(f"            console.log('✅ Visibility verification successful');")
                 playwright_code.append(f"        }} catch (error) {{")
-                playwright_code.append(f"            console.error('❌ Element not visible: {selector}');")
+                playwright_code.append(f"            console.error('❌ Element not visible: {escaped_selector}');")
                 playwright_code.append(f"            throw error;")
                 playwright_code.append(f"        }}")
                 
@@ -345,7 +416,7 @@ test.describe('{test_title}', () => {{
                 playwright_code.append(f"        }}")
                 
             elif action == 'wait':
-                wait_time = int(value) if value else 1000
+                wait_time = int(value) if value and value.isdigit() else 1000
                 playwright_code.append(f"        await page.waitForTimeout({wait_time});")
                 
             else:
@@ -353,8 +424,8 @@ test.describe('{test_title}', () => {{
                 playwright_code.append(f"        try {{")
                 playwright_code.append(f"            // Custom action: {action}")
                 if selector:
-                    playwright_code.append(f"            await page.waitForSelector('{selector}', {{ timeout: 10000 }});")
-                    playwright_code.append(f"            await page.locator('{selector}').click();")
+                    playwright_code.append(f"            await page.waitForSelector('{escaped_selector}', {{ timeout: 10000 }});")
+                    playwright_code.append(f"            await page.locator('{escaped_selector}').click();")
                 playwright_code.append(f"            console.log('✅ Custom action successful');")
                 playwright_code.append(f"        }} catch (error) {{")
                 playwright_code.append(f"            console.error('❌ Custom action failed:', error.message);")
@@ -368,7 +439,7 @@ test.describe('{test_title}', () => {{
             
             # Add expected result as comment
             if expected_result:
-                playwright_code.append(f"        // Expected: {expected_result}")
+                playwright_code.append(f"        // Expected: {escaped_expected}")
             
             playwright_code.append("")
         
@@ -531,14 +602,12 @@ module.exports = async () => {
   
   try {
     console.log('🌐 Testing connectivity to recruter.ai...');
-    await page.goto('https://www.recruter.ai', { timeout: 30000 });
+    await page.goto('https://www.app.recruter.ai/', { timeout: 30000 });
     console.log('✅ Basic connectivity test passed');
-  } catch (error) {
+} catch (error) {
     console.error('❌ Basic connectivity test failed:', error.message);
     console.log('⚠️  This may cause tests to fail');
-  } finally {
-    await browser.close();
-  }
+}
   
   console.log('🔧 Global setup completed');
 };

@@ -358,13 +358,8 @@ class TestExecutionAgent(BaseAgent):
 
             # Prepare Playwright command
             cmd = [
-                'npx.cmd', 'playwright', 'test',
-                str(relative_test_path),
-                '--reporter=json',
-                '--headed' if not self.headless else '',
-                f'--browser={self.browser}',
-                f'--timeout={self.timeout}',
-                f'--retries={self.retries}'
+                'npx.cmd', 'playwright',
+                str(relative_test_path),  # Pass the test file path directly
             ]
 
             # Remove empty strings from command

@@ -234,78 +234,13 @@ def display_detailed_results(results: Dict[str, Any]):
     # Check if this is a complete pipeline with execution
     if 'execution_result' in data:
         # Full pipeline - show all tabs including reports
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Test Cases", "🎭 Scripts", "📁 Files", "📈 Breakdown", "🔍 Reports"])
+        tab1, tab2 = st.tabs([ "📁 Files", "🔍 Reports"])
         
         with tab1:
-            display_test_cases_tab(data)
-        
-        with tab2:
-            display_scripts_tab(data)
-        
-        with tab3:
             display_files_tab(data)
         
-        with tab4:
-            display_breakdown_tab(data)
-        
-        with tab5:
+        with tab2:
             display_execution_reports(data)
-    
-    elif 'test_suite' in data:
-        # Test generation only
-        tab1, tab2 = st.tabs(["📊 Test Cases", "📈 Breakdown"])
-        
-        with tab1:
-            display_test_cases_tab(data)
-        
-        with tab2:
-            display_breakdown_tab(data)
-    
-    elif 'stats' in data:
-        # Script generation only
-        tab1, tab2 = st.tabs(["🎭 Scripts", "📁 Files"])
-        
-        with tab1:
-            display_scripts_tab(data)
-        
-        with tab2:
-            display_files_tab(data)
-
-def display_test_cases_tab(data: Dict[str, Any]):
-    """Display test cases information"""
-    test_suite = data.get('test_suite', {})
-    test_cases = test_suite.get('test_cases', [])
-    
-    if not test_cases:
-        st.info("No test cases found in results.")
-        return
-    
-    st.markdown(f"### Generated {len(test_cases)} Test Cases")
-    
-    # Show first few test cases
-    for i, test_case in enumerate(test_cases[:5]):
-        with st.expander(f"Test Case {i+1}: {test_case.get('name', 'Unnamed')}"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown(f"**Type:** {test_case.get('test_type', 'N/A')}")
-                st.markdown(f"**Priority:** {test_case.get('priority', 'N/A')}")
-                st.markdown(f"**Category:** {test_case.get('category', 'N/A')}")
-            
-            with col2:
-                st.markdown(f"**Browser:** {test_case.get('browser', 'N/A')}")
-                st.markdown(f"**Viewport:** {test_case.get('viewport', 'N/A')}")
-            
-            if 'description' in test_case:
-                st.markdown(f"**Description:** {test_case['description']}")
-            
-            if 'steps' in test_case:
-                st.markdown("**Steps:**")
-                for step_num, step in enumerate(test_case['steps'], 1):
-                    st.markdown(f"{step_num}. {step}")
-    
-    if len(test_cases) > 5:
-        st.info(f"Showing first 5 test cases. Total: {len(test_cases)}")
 
 def display_scripts_tab(data: Dict[str, Any]):
     """Display scripts information"""
@@ -337,9 +272,9 @@ def display_files_tab(data: Dict[str, Any]):
     test_folders = {
         "accessibility": "♿ Accessibility Tests",
         "cross_browser": "🌐 Cross Browser Tests", 
-        "perfomance": "⚡ Performance Tests",
-        "functionality": "🔧 Functionality Tests",
-        "edge_cases": "🎯 Edge Cases Tests"
+        "performance": "⚡ Performance Tests",
+        "functional": "🔧 Functionality Tests",
+        "edge_case": "🎯 Edge Cases Tests"
     }
     
     st.markdown("### 📁 Generated Test Files")
@@ -476,13 +411,6 @@ def display_next_steps(results: Dict[str, Any]):
     
     st.markdown("## 📋 Next Steps")
     
-    st.markdown("""
-    <div class="info-box">
-        <h4>Ready to Execute Tests</h4>
-        <p>Your test scripts have been generated and are ready for execution.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
     for step in next_steps:
         if step.strip():  # Skip empty lines
             st.markdown(f"• {step}")
@@ -492,22 +420,22 @@ def process_recruiter_ai(pipeline_mode: str):
     if pipeline_mode == 'full':
         # Full pipeline
         display_progress("Starting full pipeline: video → test cases → scripts → execution", 0.1)
-        time.sleep(1)
+        time.sleep(3)
         
         display_progress("Downloading and transcribing video...", 0.2)
-        time.sleep(4)
+        time.sleep(10)
         
         display_progress("Processing transcript into structured format...", 0.4)
-        time.sleep(8)
+        time.sleep(10)
         
         display_progress("Generating test cases...", 0.6)
-        time.sleep(10)
+        time.sleep(15)
         
         display_progress("Converting to Playwright scripts...", 0.8)
-        time.sleep(10)
+        time.sleep(15)
         
         display_progress("Executing tests...", 0.9)
-        time.sleep(10)
+        time.sleep(15)
         
         return st.session_state.pipeline.process_recruter_video_complete()
     

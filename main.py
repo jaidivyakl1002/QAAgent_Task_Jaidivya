@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List
 from datetime import datetime
-
+import webbrowser
+import subprocess
+import glob
+from typing import Optional
 # Import your existing components
 from core.video_processor import VideoProcessor
 from agents.test_generator_agent import TestGeneratorAgent
@@ -364,6 +367,8 @@ class QAAgentPipeline:
         1. Process video and generate test cases
         2. Convert test cases to Playwright scripts
         3. Prepare for execution
+        4. Executes tests
+        5. Generates Reports
         """
         try:
             logger.info("Starting complete Recruter.ai pipeline...")
