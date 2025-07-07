@@ -45,7 +45,8 @@ class PlaywrightTestGenerator:
         selector = selector.replace('"', '\\"')
         
         return selector
-        
+    
+    # Give email and password below in const email and password     
     def _load_template(self) -> str:
         """Enhanced Playwright test template with better error handling"""
         return '''// Auto-generated Playwright test
@@ -57,8 +58,8 @@ import {{ test, expect, Page, BrowserContext }} from '@playwright/test';
 
 // Inline login function to avoid import issues
 async function loginToRecruterAi(page: Page): Promise<void> {{
-    const email = 'jaidivya.lohani@learner.manipal.edu';
-    const password = 'Screwdriver@1002';
+    const email = '';
+    const password = '';
     
     console.log('🔐 Navigating to login page...');
     await page.goto('https://www.app.recruter.ai/', {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
